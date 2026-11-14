@@ -18,6 +18,12 @@ from tradingagents.dataflows.vendors.alpha_vantage import (
     get_stock as get_alpha_vantage_stock,
 )
 from tradingagents.dataflows.vendors.fred import get_macro_data as get_fred_macro_data
+from tradingagents.dataflows.vendors.india.bse import (
+    get_announcements_bse,
+    get_insider_transactions_bse,
+    get_shareholding_bse,
+)
+from tradingagents.dataflows.vendors.india.news import get_india_market_news, get_news_india
 from tradingagents.dataflows.vendors.polymarket import (
     get_prediction_markets as get_polymarket_prediction_markets,
 )
@@ -83,7 +89,15 @@ TOOLS_CATEGORIES = {
         "tools": [
             "get_prediction_markets",
         ]
-    }
+    },
+    "india_data": {
+        "description": "NSE/BSE filings, shareholding and Indian market news",
+        "tools": [
+            "get_corporate_announcements",
+            "get_shareholding_pattern",
+            "get_india_market_news",
+        ]
+    },
 }
 
 # Optional enrichment categories. These add macro/event context to the news
@@ -91,7 +105,7 @@ TOOLS_CATEGORIES = {
 # sentinel instead of aborting the run (a bad LLM-supplied indicator, a missing
 # key, or a network blip should not crash an analysis over flavour data). Core
 # categories (prices, fundamentals, news) still raise so a broken primary is loud.
-OPTIONAL_CATEGORIES = {"macro_data", "prediction_markets"}
+OPTIONAL_CATEGORIES = {"macro_data", "prediction_markets", "india_data"}
 
 # Mapping of methods to their vendor-specific implementations
 VENDOR_METHODS = {
@@ -127,6 +141,7 @@ VENDOR_METHODS = {
     },
     # news_data
     "get_news": {
+        "india": get_news_india,
         "alpha_vantage": get_alpha_vantage_news,
         "yfinance": get_news_yfinance,
     },
@@ -135,6 +150,7 @@ VENDOR_METHODS = {
         "alpha_vantage": get_alpha_vantage_global_news,
     },
     "get_insider_transactions": {
+        "india": get_insider_transactions_bse,
         "alpha_vantage": get_alpha_vantage_insider_transactions,
         "yfinance": get_yfinance_insider_transactions,
     },
@@ -145,6 +161,16 @@ VENDOR_METHODS = {
     # prediction_markets
     "get_prediction_markets": {
         "polymarket": get_polymarket_prediction_markets,
+    },
+    # india_data (NSE/BSE listings only; other symbols get a no-data notice)
+    "get_corporate_announcements": {
+        "bse": get_announcements_bse,
+    },
+    "get_shareholding_pattern": {
+        "bse": get_shareholding_bse,
+    },
+    "get_india_market_news": {
+        "economic_times": get_india_market_news,
     },
 }
 

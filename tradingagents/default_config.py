@@ -22,6 +22,7 @@ _ENV_OVERRIDES = {
     "TRADINGAGENTS_MAX_TOOL_ROUNDS":      "max_tool_rounds",
     "TRADINGAGENTS_CHECKPOINT_ENABLED":   "checkpoint_enabled",
     "TRADINGAGENTS_BENCHMARK_TICKER":     "benchmark_ticker",
+    "TRADINGAGENTS_INDIA_BSE":            "india_bse_enabled",
     "TRADINGAGENTS_TEMPERATURE":          "temperature",
     "TRADINGAGENTS_LLM_MAX_RETRIES":      "llm_max_retries",
     "TRADINGAGENTS_MAX_TOKENS":           "max_tokens",
@@ -161,9 +162,13 @@ def build_default_config() -> dict:
             # Statements come from SEC EDGAR as filed (US filers), then Yahoo; the
         # overview and insider tools, which SEC EDGAR does not serve, from Yahoo.
         "fundamental_data": "sec_edgar,yfinance",  # Options: sec_edgar, alpha_vantage, yfinance
-            "news_data": "yfinance",             # Options: alpha_vantage, yfinance
+            # "india" serves NSE/BSE tickers (Indian press, BSE insider/SAST filings) and
+            # passes every other ticker to the next vendor; drop it to use Yahoo alone.
+            "news_data": "india,yfinance",       # Options: india, alpha_vantage, yfinance
             "macro_data": "fred",                # Options: fred (needs FRED_API_KEY)
             "prediction_markets": "polymarket",  # Options: polymarket (keyless)
+            # NSE/BSE listings only: BSE filings and shareholding, Economic Times headlines.
+            "india_data": "default",
         },
         # Tool-level configuration (takes precedence over category-level)
         "tool_vendors": {
@@ -179,6 +184,11 @@ def build_default_config() -> dict:
         # decision's outcome is measured, for reflection and for the backtest figures.
         "holding_period_days": 5,
         "benchmark_ticker": None,
+        # BSE filings come from the data feed behind bseindia.com, which has no public
+        # API and whose site terms may restrict automated access: on here for personal
+        # research. Set TRADINGAGENTS_INDIA_BSE=false to turn it off (e.g. before
+        # using this commercially); Indian news works either way.
+        "india_bse_enabled": True,
         "benchmark_map": {
             ".NS":  "^NSEI",       # NSE India (Nifty 50)
             ".BO":  "^BSESN",      # BSE India (Sensex)

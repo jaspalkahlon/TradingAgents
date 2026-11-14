@@ -3,19 +3,57 @@ from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from tradingagents.agents.analysts.turn import take_turn
 from tradingagents.agents.context import get_instrument_context_from_state, get_language_instruction
 from tradingagents.agents.tools import (
+    get_corporate_announcements,
     get_global_news,
+    get_india_market_news,
     get_macro_indicators,
     get_news,
     get_prediction_markets,
+)
+from tradingagents.dataflows.vendors.india.common import bse_enabled, indian_listing
+
+# The tools offered for any instrument.
+BASE_TOOLS = (
+    get_news,
+    get_global_news,
+    get_macro_indicators,
+    get_prediction_markets,
+)
+# Added for NSE/BSE listings.
+INDIA_TOOLS = (
+    get_corporate_announcements,
+    get_india_market_news,
+)
+# Its tool node is built from every tool it can be offered.
+TOOLS = BASE_TOOLS + INDIA_TOOLS
+
+# Need BSE's feed, which is opt-in (india_bse_enabled).
+BSE_TOOLS = (get_corporate_announcements,)
+
+INDIA_BRIEF = (
+    " The instrument is listed in India: get_news covers the Indian business press, and"
+    " get_india_market_news(curr_date, look_back_days) gives Indian market and economy headlines"
+    " (RBI, FII/DII flows, Nifty, rupee). FRED covers US and euro-area data, not India."
+)
+BSE_BRIEF = (
+    " Also use get_corporate_announcements(start_date, end_date) for what the company filed with BSE"
+    " in the window (results, board meetings, orders, ratings, insider and SAST disclosures,"
+    " promoter pledges), which the market treats as primary news."
 )
 
-# The tools this analyst is offered; its tool node is built from the same tuple.
-TOOLS = (
-    get_news,
-    get_global_news,
-    get_macro_indicators,
-    get_prediction_markets,
-)
+
+def india_brief(ticker: str | None) -> str:
+    """The India-specific part of the brief, empty for any other listing."""
+    if not indian_listing(ticker or ""):
+        return ""
+    return INDIA_BRIEF + (BSE_BRIEF if bse_enabled() else "")
+
+
+def tools_for(ticker: str) -> tuple:
+    """The tools offered for ``ticker``: the Indian ones only for an NSE/BSE listing."""
+    if not indian_listing(ticker or ""):
+        return BASE_TOOLS
+    return TOOLS if bse_enabled() else tuple(t for t in TOOLS if t not in BSE_TOOLS)
 
 
 def create_news_analyst(llm):
@@ -27,6 +65,7 @@ def create_news_analyst(llm):
 
         system_message = (
             f"You are a news researcher tasked with analyzing recent news and trends over the past week. Please write a comprehensive report of the current state of the world that is relevant for trading and macroeconomics. Use the available tools: get_news(start_date, end_date) for news about the {asset_label} under analysis, get_global_news(curr_date, look_back_days, limit) for broader macroeconomic news, get_macro_indicators(indicator, curr_date, look_back_days) to ground macro commentary in actual data from FRED (e.g. 'cpi', 'core_pce', 'unemployment', 'fed_funds_rate', '10y_treasury', 'yield_curve'), and get_prediction_markets(topic, limit) for live market-implied probabilities of forward-looking events (e.g. 'Fed rate cut', 'recession 2026', geopolitical or sector events). Provide specific, actionable insights with supporting evidence to help traders make informed decisions."
+            + india_brief(state.get("company_of_interest"))
             + """ Make sure to append a Markdown table at the end of the report to organize key points in the report, organized and easy to read."""
             + get_language_instruction()
         )
@@ -49,11 +88,12 @@ def create_news_analyst(llm):
         )
 
         prompt = prompt.partial(system_message=system_message)
-        prompt = prompt.partial(tool_names=", ".join([tool.name for tool in TOOLS]))
+        tools = tools_for(state.get("company_of_interest"))
+        prompt = prompt.partial(tool_names=", ".join([tool.name for tool in tools]))
         prompt = prompt.partial(current_date=current_date)
         prompt = prompt.partial(instrument_context=instrument_context)
 
-        result, report = take_turn(prompt, llm, TOOLS, state["messages"])
+        result, report = take_turn(prompt, llm, tools, state["messages"])
 
         return {
             "messages": [result],
