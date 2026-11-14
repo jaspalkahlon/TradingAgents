@@ -4,7 +4,7 @@ Usage:
     .venv/bin/python run_india.py RELIANCE.NS                # today's date
     .venv/bin/python run_india.py TCS.NS INFY.NS 2026-11-13  # several tickers, given date
 
-Needs ANTHROPIC_API_KEY in the environment. Reports are saved under ./reports.
+Needs ANTHROPIC_API_KEY (or PRODIFY_CLAUDE_KEY) in the environment. Reports are saved under ./reports.
 """
 import datetime as dt
 import os
@@ -14,8 +14,12 @@ import sys
 from tradingagents.default_config import DEFAULT_CONFIG
 from tradingagents.graph.trading_graph import TradingAgentsGraph
 
+# Claude Code cloud sessions reserve ANTHROPIC_API_KEY for their own login and clear
+# it, so the key can also be supplied as PRODIFY_CLAUDE_KEY.
+if not os.environ.get("ANTHROPIC_API_KEY") and os.environ.get("PRODIFY_CLAUDE_KEY"):
+    os.environ["ANTHROPIC_API_KEY"] = os.environ["PRODIFY_CLAUDE_KEY"]
 if not os.environ.get("ANTHROPIC_API_KEY"):
-    sys.exit("ANTHROPIC_API_KEY is not set.")
+    sys.exit("Set ANTHROPIC_API_KEY (or PRODIFY_CLAUDE_KEY in a Claude Code cloud environment).")
 
 args = sys.argv[1:] or ["RELIANCE.NS"]
 date = args.pop() if re.fullmatch(r"\d{4}-\d{2}-\d{2}", args[-1]) else dt.date.today().isoformat()
