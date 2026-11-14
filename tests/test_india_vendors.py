@@ -51,13 +51,29 @@ GOOGLE_RSS = """<?xml version="1.0"?><rss><channel>
 </channel></rss>"""
 
 
+def _configure(**values):
+    """Set config keys for one test (get_config() hands out copies); _restore_config undoes it."""
+    from tradingagents.dataflows.config import set_config
+
+    set_config(values)
+
+
+@pytest.fixture(autouse=True)
+def _restore_config():
+    from tradingagents.dataflows.config import get_config, set_config
+
+    keys = ("data_cache_dir", "india_bse_enabled")
+    saved = {k: get_config().get(k) for k in keys}
+    yield
+    set_config(saved)
+
+
 @pytest.fixture
 def offline(monkeypatch, tmp_path):
     """BSE and RSS answered from fixtures, with the scrip master cache in tmp."""
-    from tradingagents.dataflows.config import get_config
 
     calls = []
-    monkeypatch.setitem(get_config(), "data_cache_dir", str(tmp_path))
+    _configure(data_cache_dir=str(tmp_path), india_bse_enabled=True)
 
     def fake_json(url, params=None, source=""):
         calls.append((url, params))
@@ -150,12 +166,31 @@ def test_google_news_parsing_dedupes_and_respects_window(offline):
 
 
 @pytest.mark.unit
-def test_india_tools_offered_only_for_indian_listings():
+@pytest.mark.parametrize("bse_on", [True, False])
+def test_india_tools_offered_only_for_indian_listings(monkeypatch, bse_on):
     from tradingagents.agents.analysts import fundamentals_analyst as fa, news_analyst as na
-
+    _configure(india_bse_enabled=bse_on)
     for mod in (na, fa):
-        assert mod.tools_for("TCS.NS") == mod.TOOLS
+        offered = mod.tools_for("TCS.NS")
+        assert all(t in offered for t in mod.BASE_TOOLS)
+        assert all((t in offered) == bse_on for t in mod.BSE_TOOLS)
         assert mod.tools_for("NVDA") == mod.BASE_TOOLS
+        assert mod.india_brief("NVDA") == ""
+        assert ("get_corporate_announcements" in mod.india_brief("TCS.NS")) == bse_on
+    assert na.get_india_market_news in na.tools_for("TCS.NS")
+
+
+@pytest.mark.unit
+def test_with_bse_off_insider_falls_back_to_yahoo(monkeypatch):
+    from tradingagents.dataflows import router
+
+    _configure(india_bse_enabled=False)
+    monkeypatch.setattr(bse, "http_json", lambda *a, **k: pytest.fail("BSE was called"))
+    monkeypatch.setitem(router.VENDOR_METHODS["get_insider_transactions"], "yfinance",
+                        lambda *a: "yahoo insiders")
+    assert router.route_to_vendor("get_insider_transactions", "RELIANCE.NS", None) == "yahoo insiders"
+    out = router.route_to_vendor("get_corporate_announcements", "RELIANCE.NS", "2026-11-01", "2026-11-13")
+    assert out.startswith("DATA_UNAVAILABLE") and "TRADINGAGENTS_INDIA_BSE" in out
 
 
 @pytest.mark.unit

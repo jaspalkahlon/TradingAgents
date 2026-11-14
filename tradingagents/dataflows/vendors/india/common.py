@@ -12,7 +12,12 @@ import re
 
 import requests
 
-from tradingagents.dataflows.errors import NoMarketDataError, VendorUnavailableError
+from tradingagents.dataflows.config import get_config
+from tradingagents.dataflows.errors import (
+    NoMarketDataError,
+    VendorNotConfiguredError,
+    VendorUnavailableError,
+)
 from tradingagents.dataflows.symbols import normalize_symbol
 
 logger = logging.getLogger(__name__)
@@ -52,6 +57,18 @@ def require_indian(ticker: str) -> tuple[str, str]:
     if listing is None:
         raise NoMarketDataError(ticker, detail="not an NSE (.NS) or BSE (.BO) listing")
     return listing
+
+
+def bse_enabled() -> bool:
+    """Whether the user opted in to BSE's website data feed (``india_bse_enabled``)."""
+    return bool(get_config().get("india_bse_enabled"))
+
+
+def require_bse() -> None:
+    if not bse_enabled():
+        raise VendorNotConfiguredError(
+            "BSE filings are off; set TRADINGAGENTS_INDIA_BSE=true (india_bse_enabled) to use them"
+        )
 
 
 def search_name(name: str) -> str:

@@ -22,6 +22,7 @@ _ENV_OVERRIDES = {
     "TRADINGAGENTS_MAX_TOOL_ROUNDS":      "max_tool_rounds",
     "TRADINGAGENTS_CHECKPOINT_ENABLED":   "checkpoint_enabled",
     "TRADINGAGENTS_BENCHMARK_TICKER":     "benchmark_ticker",
+    "TRADINGAGENTS_INDIA_BSE":            "india_bse_enabled",
     "TRADINGAGENTS_TEMPERATURE":          "temperature",
     "TRADINGAGENTS_LLM_MAX_RETRIES":      "llm_max_retries",
     "TRADINGAGENTS_MAX_TOKENS":           "max_tokens",
@@ -183,6 +184,11 @@ def build_default_config() -> dict:
         # decision's outcome is measured, for reflection and for the backtest figures.
         "holding_period_days": 5,
         "benchmark_ticker": None,
+        # BSE filings come from the data feed behind bseindia.com, which has no public
+        # API and whose site terms may restrict automated access: on here for personal
+        # research. Set TRADINGAGENTS_INDIA_BSE=false to turn it off (e.g. before
+        # using this commercially); Indian news works either way.
+        "india_bse_enabled": True,
         "benchmark_map": {
             ".NS":  "^NSEI",       # NSE India (Nifty 50)
             ".BO":  "^BSESN",      # BSE India (Sensex)

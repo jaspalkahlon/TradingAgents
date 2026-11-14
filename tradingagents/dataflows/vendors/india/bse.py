@@ -21,7 +21,7 @@ from tradingagents.dataflows.config import get_config
 from tradingagents.dataflows.date_window import is_historical
 from tradingagents.dataflows.errors import NoMarketDataError, VendorUnavailableError
 from tradingagents.dataflows.files import replace_file
-from tradingagents.dataflows.vendors.india.common import http_json, require_indian
+from tradingagents.dataflows.vendors.india.common import http_json, require_bse, require_indian
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +30,7 @@ ATTACHMENT_URL = "https://www.bseindia.com/xml-data/corpfiling/AttachLive/{name}
 _MASTER_TTL_SECONDS = 7 * 24 * 3600
 _MAX_PAGES = 5           # 50 rows a page; a busy company files ~20 a month
 _INSIDER_CATEGORIES = ("insider trading", "sast")
+_ROUTINE_SUBCATEGORIES = ("closure of trading window",)  # a calendar notice, not a trade
 
 
 # --------------------------------------------------------------------------- scrips
@@ -40,6 +41,7 @@ def _master_path() -> Path:
 
 def _scrip_master() -> list[dict]:
     """BSE's list of active equity scrips, cached for a week."""
+    require_bse()
     path = _master_path()
     if path.exists() and time.time() - path.stat().st_mtime < _MASTER_TTL_SECONDS:
         with contextlib.suppress(ValueError):
@@ -96,6 +98,7 @@ def _disseminated(row: dict) -> datetime | None:
 
 def fetch_announcements(code: str, start_date: str, end_date: str) -> list[dict]:
     """All announcements a scrip filed between the dates (inclusive), newest first."""
+    require_bse()
     start = datetime.strptime(start_date, "%Y-%m-%d")
     end = datetime.strptime(end_date, "%Y-%m-%d")
     rows: list[dict] = []
@@ -123,11 +126,17 @@ def fetch_announcements(code: str, start_date: str, end_date: str) -> list[dict]
     return kept
 
 
+def _clean(text) -> str:
+    """BSE text with its SQL-escaped quotes ('') undone and whitespace collapsed."""
+    return " ".join(str(text or "").replace("''", "'").split())
+
+
 def _format_row(row: dict) -> str:
     when = _disseminated(row)
     category = " / ".join(p for p in (row.get("CATEGORYNAME"), row.get("SUBCATNAME")) if p and p.strip() != "-1")
-    subject = (row.get("NEWSSUB") or "").strip()
-    headline = (row.get("HEADLINE") or "").strip()
+    subject = _clean(row.get("NEWSSUB"))
+    # MORE holds the full text; HEADLINE is it cut off with "....".
+    headline = _clean(row.get("MORE")) or _clean(row.get("HEADLINE"))
     line = f"- **{when:%Y-%m-%d %H:%M} IST** [{category or 'Uncategorised'}] {subject}"
     if headline and headline.lower() not in subject.lower():
         line += f"\n  {headline[:600]}"
@@ -156,6 +165,7 @@ def get_insider_transactions_bse(ticker: str, as_of_date: str | None = None) -> 
     rows = [
         r for r in fetch_announcements(scrip["code"], start, end)
         if any(c in (r.get("CATEGORYNAME") or "").lower() for c in _INSIDER_CATEGORIES)
+        and not any(s in (r.get("SUBCATNAME") or "").lower() for s in _ROUTINE_SUBCATEGORIES)
     ]
     head = (f"# Insider and SAST disclosures for {scrip['name']} (BSE {scrip['code']})\n"
             f"# Filed {start} to {end}, as disseminated by BSE"
