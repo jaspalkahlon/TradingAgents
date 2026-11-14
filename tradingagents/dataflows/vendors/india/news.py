@@ -71,15 +71,29 @@ def _fetch_rss(url: str, params: dict | None, source: str) -> list[dict]:
     return parse_rss(response.text, source)
 
 
+def _yahoo_name(ticker: str) -> str | None:
+    import yfinance as yf
+
+    from tradingagents.dataflows.vendors.yahoo.common import yf_retry
+
+    info = yf_retry(lambda: yf.Ticker(ticker).info) or {}
+    return info.get("longName") or info.get("shortName")
+
+
 def _company_name(ticker: str) -> str:
-    """The issuer's name from BSE, else the NSE/BSE symbol itself."""
+    """The issuer's name, from BSE's scrip master, else Yahoo, else the symbol itself."""
     from tradingagents.dataflows.vendors.india.bse import resolve_scrip
 
     try:
         return search_name(resolve_scrip(ticker)["name"])
     except VendorError as exc:
-        logger.info("BSE name lookup failed for %s (%s); searching by symbol", ticker, exc)
-        return require_indian(ticker)[0]
+        logger.info("BSE name lookup failed for %s (%s); trying Yahoo", ticker, exc)
+    try:
+        if name := _yahoo_name(ticker):
+            return search_name(name)
+    except Exception as exc:  # noqa: BLE001 — a name is a nicety, the symbol still works
+        logger.info("Yahoo name lookup failed for %s (%s)", ticker, exc)
+    return require_indian(ticker)[0]
 
 
 def _format(articles: list[dict]) -> str:
@@ -89,7 +103,8 @@ def _format(articles: list[dict]) -> str:
         line = f"### {when}{a['title']} (source: {a['publisher']})"
         if a["summary"]:
             line += f"\n{a['summary']}"
-        if a["link"]:
+        # Google News links are long opaque redirects: tokens, not information.
+        if a["link"] and "news.google.com" not in a["link"]:
             line += f"\nLink: {a['link']}"
         out.append(line)
     return "\n\n".join(out)
