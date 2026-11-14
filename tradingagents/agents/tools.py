@@ -289,3 +289,66 @@ def get_prediction_markets(
         str: A formatted markdown report of matching prediction markets
     """
     return route_to_vendor("get_prediction_markets", topic, limit, trade_date or None)
+
+
+@tool
+def get_corporate_announcements(
+    ticker: Annotated[str, InjectedState("company_of_interest")],
+    start_date: Annotated[str, "Start date in yyyy-mm-dd format"],
+    end_date: Annotated[str, "End date in yyyy-mm-dd format"],
+    trade_date: Annotated[str, InjectedState("trade_date")] = "",
+) -> str:
+    """
+    Retrieve the corporate announcements an NSE/BSE-listed company filed with BSE
+    in a window: results, board meetings, dividends and buybacks, order wins,
+    credit ratings, management changes, insider (PIT) and takeover-code (SAST)
+    disclosures including promoter pledges. Each is dated by when BSE
+    disseminated it to the market. Only for tickers ending in .NS or .BO.
+    Args:
+        start_date (str): Start date in yyyy-mm-dd format
+        end_date (str): End date in yyyy-mm-dd format
+    Returns:
+        str: The filings, newest first, with links to the filed documents
+    """
+    try:
+        start_date, end_date = as_of_window(start_date, end_date, trade_date)
+    except ValueError as e:
+        return str(e)
+    return route_to_vendor("get_corporate_announcements", ticker, start_date, end_date)
+
+
+@tool
+def get_shareholding_pattern(
+    ticker: Annotated[str, InjectedState("company_of_interest")],
+    trade_date: Annotated[str, InjectedState("trade_date")] = "",
+) -> str:
+    """
+    Retrieve the quarterly shareholding pattern an NSE/BSE-listed company filed
+    with BSE: promoter, FII/FPI, mutual fund, insurance and retail holdings,
+    and the share of promoter holding that is pledged, over recent quarters.
+    Only quarters filed by the run date are shown. Only for tickers ending in
+    .NS or .BO.
+    Returns:
+        str: A table of holdings by quarter with quarter-on-quarter changes
+    """
+    return route_to_vendor("get_shareholding_pattern", ticker, trade_date or None)
+
+
+@tool
+def get_india_market_news(
+    curr_date: Annotated[str, "Current date in yyyy-mm-dd format"],
+    look_back_days: Annotated[int, "Days to look back"] = 3,
+    trade_date: Annotated[str, InjectedState("trade_date")] = "",
+) -> str:
+    """
+    Retrieve India-wide market and economy headlines from the Economic Times:
+    RBI policy, FII/DII flows, Nifty and Sensex moves, the rupee, government
+    policy and budget news. Use it alongside get_global_news when the
+    instrument is listed in India (.NS or .BO).
+    Args:
+        curr_date (str): Current date in yyyy-mm-dd format
+        look_back_days (int): Days to look back, default 3
+    Returns:
+        str: Headlines, newest first
+    """
+    return route_to_vendor("get_india_market_news", as_of(curr_date, trade_date), look_back_days)

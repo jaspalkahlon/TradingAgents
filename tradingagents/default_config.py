@@ -161,9 +161,13 @@ def build_default_config() -> dict:
             # Statements come from SEC EDGAR as filed (US filers), then Yahoo; the
         # overview and insider tools, which SEC EDGAR does not serve, from Yahoo.
         "fundamental_data": "sec_edgar,yfinance",  # Options: sec_edgar, alpha_vantage, yfinance
-            "news_data": "yfinance",             # Options: alpha_vantage, yfinance
+            # "india" serves NSE/BSE tickers (Indian press, BSE insider/SAST filings) and
+            # passes every other ticker to the next vendor; drop it to use Yahoo alone.
+            "news_data": "india,yfinance",       # Options: india, alpha_vantage, yfinance
             "macro_data": "fred",                # Options: fred (needs FRED_API_KEY)
             "prediction_markets": "polymarket",  # Options: polymarket (keyless)
+            # NSE/BSE listings only: BSE filings and shareholding, Economic Times headlines.
+            "india_data": "default",
         },
         # Tool-level configuration (takes precedence over category-level)
         "tool_vendors": {

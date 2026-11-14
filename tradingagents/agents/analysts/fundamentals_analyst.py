@@ -5,19 +5,39 @@ from tradingagents.agents.context import get_instrument_context_from_state, get_
 from tradingagents.agents.tools import (
     get_balance_sheet,
     get_cashflow,
+    get_corporate_announcements,
     get_fundamentals,
     get_income_statement,
     get_insider_transactions,
 )
+from tradingagents.dataflows.vendors.india.common import indian_listing
 
-# The tools this analyst is offered; its tool node is built from the same tuple.
-TOOLS = (
+# The tools offered for any instrument.
+BASE_TOOLS = (
     get_fundamentals,
     get_balance_sheet,
     get_cashflow,
     get_income_statement,
     get_insider_transactions,
 )
+# Added for NSE/BSE listings.
+INDIA_TOOLS = (
+    get_corporate_announcements,
+)
+# Its tool node is built from every tool it can be offered.
+TOOLS = BASE_TOOLS + INDIA_TOOLS
+
+INDIA_BRIEF = (
+    " The company is listed in India. `get_insider_transactions` returns BSE's insider-trading (PIT) and SAST"
+    " disclosures, including pledge creation and release. Use"
+    " `get_corporate_announcements(start_date, end_date)` over the last quarter for results,"
+    " dividends, buybacks, fund raises and credit-rating actions."
+)
+
+
+def tools_for(ticker: str) -> tuple:
+    """The tools offered for ``ticker``: the Indian ones only for an NSE/BSE listing."""
+    return TOOLS if indian_listing(ticker or "") else BASE_TOOLS
 
 
 def create_fundamentals_analyst(llm):
@@ -29,6 +49,7 @@ def create_fundamentals_analyst(llm):
             "You are a researcher tasked with analyzing fundamental information over the past week about a company. Please write a comprehensive report of the company's fundamental information such as financial documents, company profile, basic company financials, and company financial history to gain a full view of the company's fundamental information to inform traders. Make sure to include as much detail as possible. Provide specific, actionable insights with supporting evidence to help traders make informed decisions."
             + " Make sure to append a Markdown table at the end of the report to organize key points in the report, organized and easy to read."
             + " Use the available tools: `get_fundamentals` for comprehensive company analysis, `get_balance_sheet`, `get_cashflow`, and `get_income_statement` for specific financial statements, and `get_insider_transactions` for recent insider buying and selling."
+            + (INDIA_BRIEF if indian_listing(state.get("company_of_interest") or "") else "")
             + get_language_instruction()
         )
 
@@ -50,11 +71,12 @@ def create_fundamentals_analyst(llm):
         )
 
         prompt = prompt.partial(system_message=system_message)
-        prompt = prompt.partial(tool_names=", ".join([tool.name for tool in TOOLS]))
+        tools = tools_for(state.get("company_of_interest"))
+        prompt = prompt.partial(tool_names=", ".join([tool.name for tool in tools]))
         prompt = prompt.partial(current_date=current_date)
         prompt = prompt.partial(instrument_context=instrument_context)
 
-        result, report = take_turn(prompt, llm, TOOLS, state["messages"])
+        result, report = take_turn(prompt, llm, tools, state["messages"])
 
         return {
             "messages": [result],
